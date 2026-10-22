@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "esnext",
+    "lib": ["ES2023", "DOM"],
+    "types": ["vite/client"],
+    "skipLibCheck": true,
+    /* The bundle of checks that catches the usual mistakes — a value that might
+       be undefined, a type TypeScript had to guess at. Everything in src/ passes
+       with it on, so keep it on. */
+    "strict": true,
+
+    /* Vite does the building, so TypeScript only checks our code and writes nothing. */
+    "moduleResolution": "bundler",
+    "noEmit": true,
+
+    /* Vite compiles one file at a time and never looks at another file's type
+       information. This flag makes TypeScript refuse anything that would need
+       more than that. `import { User } from './types'` stays fine: the
+       transpiler drops the binding once it turns out to be only a type. */
+    "isolatedModules": true,
+
+    /* Helpful checks: a name that is declared but never used is a mistake. */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"]
+}
