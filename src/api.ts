@@ -6,7 +6,7 @@
 
 import { ApiError, BallotReceipt, Candidate, Election, ElectionDetail, ElectionResults, ElectionStatus, Position, RollEntry, Selection, User } from './types'
 
-const API = '/api/v1'
+const API = 'https://ful-voting-server.onrender.com/api/v1'
 const TOKEN_KEY = 'ballotbox.token'
 const REQUEST_TIMEOUT_MS = 15000
 
