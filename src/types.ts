@@ -4,6 +4,7 @@
 /** A failed request. `status` is the HTTP code, or 0 when the server was unreachable. */
 export interface ApiError extends Error {
   status: number
+  data?: any
 }
 
 export type Role = 'VOTER' | 'ADMIN'
@@ -16,6 +17,13 @@ export interface User {
   fullName: string
   matricNo: string | null
   role: Role
+  isVerified?: boolean
+}
+
+export interface RegisterResult {
+  message: string
+  requiresVerification: boolean
+  email: string
 }
 
 export interface Candidate {

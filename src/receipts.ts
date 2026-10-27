@@ -35,6 +35,10 @@ export function saveReceipt(receipt: BallotReceipt): void {
   localStorage.setItem(RECEIPTS_KEY, JSON.stringify([...others, receipt]))
 }
 
+export function clearReceipts(): void {
+  localStorage.removeItem(RECEIPTS_KEY)
+}
+
 /** Used by the verify page: does a code we typed belong to a ballot cast here? */
 export function findElectionOfCode(code: string): string | null {
   // Codes are compared the way the API compares them: capitals only.

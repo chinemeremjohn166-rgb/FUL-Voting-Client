@@ -1,16 +1,20 @@
-// Sign in and create-account. They share the same two-panel layout: the left
+// Sign in, create-account, and email verification. They share the same two-panel layout: the left
 // side explains the app, the right side holds one form at a time.
 
-import { logIn, signUp } from '../session'
+import { logIn, resendCode, signUp, verifyEmail } from '../session'
 import { Page } from '../types'
-import { banner, field, icon, setBusy, toast } from '../ui'
+import { banner, esc, field, icon, setBusy, toast } from '../ui'
 
-const PASSWORD_RULE = 'Password must be 8–72 characters and include an uppercase letter, a lowercase letter, a digit and a special character (@$!%*?&).'
-const PASSWORD_OK = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,72}$/
+const PASSWORD_RULE = 'Password must be 8–72 characters (no spaces) and include an uppercase letter, a lowercase letter, a digit and a special character.'
+const PASSWORD_OK = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d\s])\S{8,72}$/
 
-function layout(active: 'signin' | 'register', formHtml: string): string {
-  const tab = (name: 'signin' | 'register', label: string, href: string) =>
+function layout(active: 'signin' | 'register' | 'verify', formHtml: string, emailForVerify?: string): string {
+  const tab = (name: 'signin' | 'register' | 'verify', label: string, href: string) =>
     `<a class="auth-tab ${active === name ? 'active' : ''}" href="${href}">${label}</a>`
+
+  const verifyTab = active === 'verify' || emailForVerify
+    ? tab('verify', 'Verify email', `#/auth/verify-email${emailForVerify ? `?email=${encodeURIComponent(emailForVerify)}` : ''}`)
+    : ''
 
   return `<div class="auth-wrap">
     <div class="auth-card">
@@ -27,6 +31,7 @@ function layout(active: 'signin' | 'register', formHtml: string): string {
           <li>${icon('check', 16)} One secret ballot per voter, enforced server-side</li>
           <li>${icon('check', 16)} Anonymous votes with hour-level timestamps</li>
           <li>${icon('check', 16)} Receipt codes you can verify independently</li>
+          <li>${icon('check', 16)} Verified email security powered by Resend</li>
         </ul>
         <div class="auth-panel-foot">
           ${banner('info', 'Sessions last 24 hours. Sign-in attempts are rate-limited to 20 per 15 minutes.')}
@@ -36,6 +41,7 @@ function layout(active: 'signin' | 'register', formHtml: string): string {
         <div class="auth-tabs" role="tablist">
           ${tab('signin', 'Sign in', '#/auth/signin')}
           ${tab('register', 'Create account', '#/auth/register')}
+          ${verifyTab}
         </div>
         ${formHtml}
       </div>
@@ -95,9 +101,22 @@ export function signInPage(): Page {
         const result = await logIn(identifier, password)
         setBusy(button as HTMLButtonElement, false)
 
-        if ('error' in result) return showError(root, result.error)
+        if ('error' in result) {
+          if (result.requiresVerification && result.email) {
+            toast(result.error, 'error')
+            location.hash = `#/auth/verify-email?email=${encodeURIComponent(result.email)}`
+            return
+          }
+          return showError(root, result.error)
+        }
+
         toast(`Welcome back, ${result.user.fullName.split(' ')[0]}`, 'success')
-        location.hash = '#/elections'
+        // Direct admin users straight to admin dashboard, voters to elections
+        if (result.user.role === 'ADMIN') {
+          location.hash = '#/admin'
+        } else {
+          location.hash = '#/elections'
+        }
       })
     },
   }
@@ -110,11 +129,11 @@ export function registerPage(): Page {
     async render() {
       const form = `<form class="stack-form auth-form" novalidate>
         <h2>Create your account</h2>
-        <p class="muted auth-sub">Registration does not enroll you in an election — an administrator must add you to the voter roll.</p>
+        <p class="muted auth-sub">Registration will send a verification code to your email address before activation.</p>
         ${field('Full name', '<input class="input" type="text" name="fullName" placeholder="Full name" autocomplete="name">')}
         ${field('Email address', '<input class="input" type="email" name="email" placeholder="you@student.edu" autocomplete="email">')}
         ${field('Matric number', '<input class="input" type="text" name="matricNo" placeholder="CSC/2023/001 (optional)">')}
-        ${field('Password', '<input class="input" type="password" name="password" placeholder="Minimum 8 characters" autocomplete="new-password">', '8–72 characters with upper, lower, digit and one of @$!%*?&')}
+        ${field('Password', '<input class="input" type="password" name="password" placeholder="Minimum 8 characters" autocomplete="new-password">', '8–72 characters with upper, lower, digit and a special character')}
         ${errorLine()}
         <button class="btn primary block lg" type="submit">Create account</button>
       </form>`
@@ -143,9 +162,99 @@ export function registerPage(): Page {
         setBusy(button as HTMLButtonElement, false)
 
         if ('error' in result) return showError(root, result.error)
-        toast('Account created — welcome to BallotBox', 'success')
-        location.hash = '#/elections'
+
+        toast('Verification code sent to your email!', 'info')
+        location.hash = `#/auth/verify-email?email=${encodeURIComponent(email)}`
       })
+    },
+  }
+}
+
+export function verifyEmailPage(initialEmail = ''): Page {
+  return {
+    title: 'Verify Email',
+
+    async render() {
+      const form = `<form class="stack-form auth-form" novalidate>
+        <h2>Verify your email</h2>
+        <p class="muted auth-sub">
+          We sent a 6-digit verification code via email to <strong data-email-display>${esc(initialEmail || 'your email')}</strong>.
+        </p>
+        ${field(
+          'Email address',
+          `<input class="input" type="email" name="email" value="${esc(initialEmail)}" placeholder="you@student.edu" autocomplete="email">`,
+        )}
+        ${field(
+          'Verification Code',
+          '<input class="input" type="text" name="code" placeholder="123456" maxlength="10" autocomplete="one-time-code" style="letter-spacing: 6px; font-size: 20px; text-align: center; font-weight: bold;">',
+          'Enter the 6-digit code received via email'
+        )}
+        ${errorLine()}
+        <button class="btn primary block lg" type="submit">Verify &amp; Continue</button>
+        <div style="margin-top: 16px; text-align: center;">
+          <p class="muted sm-text" style="margin-bottom: 6px;">Didn't receive the email or code expired?</p>
+          <button class="btn ghost sm" type="button" data-resend-btn>Resend verification code</button>
+        </div>
+        <div style="margin-top: 14px; text-align: center;">
+          <a class="sm-text muted" href="#/auth/signin">← Back to sign in</a>
+        </div>
+      </form>`
+      return layout('verify', form, initialEmail)
+    },
+
+    bind(root) {
+      const form = root.querySelector('form')
+      const submitBtn = root.querySelector('button[type=submit]')
+      const resendBtn = root.querySelector<HTMLButtonElement>('button[data-resend-btn]')
+      if (!form || !submitBtn) return
+
+      const getEmail = (): string => {
+        const emailInput = form.elements.namedItem('email') as HTMLInputElement | null
+        return (emailInput?.value || initialEmail).trim()
+      }
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault()
+        clearError(root)
+
+        const email = getEmail()
+        const codeInput = form.elements.namedItem('code') as HTMLInputElement
+        const code = codeInput ? codeInput.value.trim() : ''
+
+        if (!email) return showError(root, 'Email address is required.')
+        if (!code) return showError(root, 'Enter the verification code.')
+
+        setBusy(submitBtn as HTMLButtonElement, true, 'Verifying…')
+        const result = await verifyEmail(email, code)
+        setBusy(submitBtn as HTMLButtonElement, false)
+
+        if ('error' in result) return showError(root, result.error)
+
+        toast('Email verified successfully! Welcome to BallotBox.', 'success')
+        if (result.user.role === 'ADMIN') {
+          location.hash = '#/admin'
+        } else {
+          location.hash = '#/elections'
+        }
+      })
+
+      if (resendBtn) {
+        resendBtn.addEventListener('click', async () => {
+          clearError(root)
+          const email = getEmail()
+          if (!email) return showError(root, 'Please enter your email address to resend code.')
+
+          setBusy(resendBtn, true, 'Sending…')
+          const result = await resendCode(email)
+          setBusy(resendBtn, false)
+
+          if ('error' in result) {
+            showError(root, result.error)
+          } else {
+            toast('New verification code sent! Check your inbox.', 'success')
+          }
+        })
+      }
     },
   }
 }
