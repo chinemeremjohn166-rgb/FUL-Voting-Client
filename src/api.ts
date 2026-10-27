@@ -19,7 +19,8 @@ import {
   User,
 } from "./types";
 
-const API = import.meta.env.BASE_URL + "/api/v1";
+const API = import.meta.env.VITE_BASE_URL + "/api/v1";
+
 const TOKEN_KEY = "ballotbox.token";
 const REQUEST_TIMEOUT_MS = 15000;
 
