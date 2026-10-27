@@ -24,7 +24,17 @@ export function electionsPage(): Page {
       const user = getUser()
       const isAdmin = user?.role === 'ADMIN'
 
-      const chips = FILTERS.map(
+      const activeFilters = isAdmin
+        ? [
+            { value: 'ALL', label: 'All elections' },
+            { value: 'DRAFT', label: 'Drafts' },
+            { value: 'OPEN', label: 'Open' },
+            { value: 'CLOSED', label: 'Closed' },
+            { value: 'PUBLISHED', label: 'Published' },
+          ]
+        : FILTERS
+
+      const chips = activeFilters.map(
         (filter) => `<button type="button" class="chip ${filter.value === 'ALL' ? 'active' : ''}" data-filter="${esc(filter.value)}">${esc(filter.label)}</button>`,
       ).join('')
 
@@ -72,7 +82,8 @@ function cardsHtml(elections: Election[], isAdmin: boolean): string {
 
 function cardHtml(election: Election, isAdmin: boolean): string {
   const managing = isAdmin && election.status === 'DRAFT'
-  return `<a class="card election-card" href="#/elections/${esc(election.id)}">
+  const href = managing ? `#/admin/elections/${esc(election.id)}` : `#/elections/${esc(election.id)}`
+  return `<a class="card election-card" href="${href}">
     <div class="election-card-top">${statusBadge(election.status)}</div>
     <h3 class="election-title">${esc(election.title)}</h3>
     <p class="election-desc">${esc(election.description)}</p>

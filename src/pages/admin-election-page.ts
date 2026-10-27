@@ -170,6 +170,7 @@ function addCandidateFormHtml(position: Position): string {
   return `<form class="inline-form" data-add-candidate="${esc(position.id)}" novalidate>
     ${field('Add candidate', '<input class="input" type="text" name="fullName" placeholder="Candidate full name">')}
     ${field('Manifesto', '<input class="input" type="text" name="manifesto" placeholder="Manifesto (optional)">')}
+    ${field('Photo URL', '<input class="input" type="url" name="photoUrl" placeholder="https://… (optional)">')}
     <button class="btn ghost" type="submit">${icon('plus', 15)} Add</button>
   </form>`
 }
@@ -252,7 +253,12 @@ function bindAddCandidates(root: HTMLElement): void {
   bindAddForms(root, 'form[data-add-candidate]', async (form) => {
     const fullName = inputValue(form, 'fullName')
     if (!fullName) throw new Error("Enter the candidate's name")
-    await addCandidate(form.dataset.addCandidate ?? '', fullName, inputValue(form, 'manifesto') || null)
+    await addCandidate(
+      form.dataset.addCandidate ?? '',
+      fullName,
+      inputValue(form, 'manifesto') || null,
+      inputValue(form, 'photoUrl') || null,
+    )
     return 'Candidate added'
   })
 }

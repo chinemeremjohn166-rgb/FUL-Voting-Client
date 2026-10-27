@@ -18,7 +18,7 @@ import { ballotPage } from './pages/ballot-page'
 import { electionPage } from './pages/election-page'
 import { electionsPage } from './pages/elections-page'
 import { receiptPage } from './pages/receipt-page'
-import { registerPage, signInPage } from './pages/auth-page'
+import { registerPage, signInPage, verifyEmailPage } from './pages/auth-page'
 import { resultsPage } from './pages/results-page'
 import { verifyPage } from './pages/verify-page'
 
@@ -42,18 +42,22 @@ function readAddress(): { parts: string[]; query: URLSearchParams } {
 
 /** Which page object this address asks for — or 'go' plus a path to send there. */
 function findPage(parts: string[], query: URLSearchParams): Page | { go: string } {
+  const user = getUser()
+
   // Anyone may check a receipt, signed in or not.
   if (parts[0] === 'verify') return verifyPage(query.get('code') ?? '', query.get('election') ?? '')
 
   if (parts[0] === 'auth') {
-    if (getUser()) return { go: '#/elections' }
-    return parts[1] === 'register' ? registerPage() : signInPage()
+    if (user) return { go: user.role === 'ADMIN' ? '#/admin' : '#/elections' }
+    if (parts[1] === 'register') return registerPage()
+    if (parts[1] === 'verify-email') return verifyEmailPage(query.get('email') ?? '')
+    return signInPage()
   }
 
   // Everything else needs a signed-in user.
-  if (!getUser()) return { go: '#/auth/signin' }
+  if (!user) return { go: '#/auth/signin' }
 
-  if (!parts.length) return { go: '#/elections' }
+  if (!parts.length) return { go: user.role === 'ADMIN' ? '#/admin' : '#/elections' }
 
   if (parts[0] === 'elections') {
     if (parts.length === 1) return electionsPage()
@@ -64,7 +68,7 @@ function findPage(parts: string[], query: URLSearchParams): Page | { go: string 
   if (parts[0] === 'receipt' && parts[1]) return receiptPage(parts[1])
 
   if (parts[0] === 'admin') {
-    if (getUser()?.role !== 'ADMIN') return { go: '#/elections' }
+    if (user.role !== 'ADMIN') return { go: '#/elections' }
     if (parts.length === 1) return adminPage()
     if (parts[1] === 'new') return adminNewPage()
     if (parts[1] === 'elections' && parts[2]) return adminElectionPage(parts[2])
@@ -157,9 +161,9 @@ function topbarHtml(parts: string[]): string {
   const active = parts[0] ?? ''
 
   const links = user
-    ? navLink(active, '#/elections', 'Elections', 'box', 'elections') +
-      navLink(active, '#/verify', 'Verify receipt', 'search', 'verify') +
-      (user.role === 'ADMIN' ? navLink(active, '#/admin', 'Administration', 'shield', 'admin') : '')
+    ? (user.role === 'ADMIN' ? navLink(active, '#/admin', 'Administration', 'shield', 'admin') : '') +
+      navLink(active, '#/elections', 'Elections', 'box', 'elections') +
+      navLink(active, '#/verify', 'Verify receipt', 'search', 'verify')
     : navLink(active, '#/verify', 'Verify receipt', 'search', 'verify')
 
   const area = user
@@ -173,9 +177,11 @@ function topbarHtml(parts: string[]): string {
       </div>`
     : '<a class="btn primary sm" href="#/auth/signin">Sign in</a>'
 
+  const brandHref = user ? (user.role === 'ADMIN' ? '#/admin' : '#/elections') : '#/'
+
   return `<header class="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="${user ? '#/elections' : '#/'}">
+      <a class="brand" href="${brandHref}">
         <span class="brand-mark">${icon('box', 20)}</span>
         <span class="brand-name">BallotBox</span>
       </a>

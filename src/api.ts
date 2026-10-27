@@ -4,7 +4,7 @@
 // The API runs on port 8000. The browser talks to it through the dev proxy set
 // up in vite.config.ts, which is why every URL here starts with a plain "/api".
 
-import { ApiError, BallotReceipt, Candidate, Election, ElectionDetail, ElectionResults, ElectionStatus, Position, RollEntry, Selection, User } from './types'
+import { ApiError, BallotReceipt, Candidate, Election, ElectionDetail, ElectionResults, ElectionStatus, Position, RegisterResult, RollEntry, Selection, User } from './types'
 
 const API = '/api/v1'
 const TOKEN_KEY = 'ballotbox.token'
@@ -62,7 +62,7 @@ async function fetchJson(url: string, method = 'GET', body?: unknown): Promise<a
 
   const data = await response.json().catch(() => null)
 
-  if (!response.ok) throw failed(response.status, messageFor(response.status, data))
+  if (!response.ok) throw failed(response.status, messageFor(response.status, data), data)
 
   return data
 }
@@ -83,8 +83,8 @@ function messageFor(status: number, data: any): string {
 }
 
 /** Builds the error object every failed request throws, with the status on it. */
-function failed(status: number, message: string): ApiError {
-  return Object.assign(new Error(message), { status })
+function failed(status: number, message: string, data?: any): ApiError {
+  return Object.assign(new Error(message), { status, data })
 }
 
 /** The API has no "list all users" endpoint, so ids and matric numbers are told apart here. */
@@ -105,15 +105,29 @@ export async function login(identifier: string, password: string): Promise<User>
   return data.user
 }
 
-export async function register(input: { fullName: string; email: string; matricNo: string | null; password: string }): Promise<User> {
+export async function register(input: { fullName: string; email: string; matricNo: string | null; password: string }): Promise<RegisterResult> {
   const data = await fetchJson(`${API}/auth/register`, 'POST', {
     fullname: input.fullName, // the API really does spell this with a lowercase "n"
     email: input.email,
     matricNo: input.matricNo ?? undefined,
     password: input.password,
   })
+  return data
+}
+
+export async function verifyEmailCode(email: string, code: string): Promise<User> {
+  const data = await fetchJson(`${API}/auth/verify-email`, 'POST', {
+    email: email.trim(),
+    code: code.trim(),
+  })
   setToken(data.token)
   return data.user
+}
+
+export async function resendVerificationCode(email: string): Promise<{ message: string }> {
+  return fetchJson(`${API}/auth/resend-verification`, 'POST', {
+    email: email.trim(),
+  })
 }
 
 export async function readLoggedInUser(): Promise<User> {
@@ -187,8 +201,12 @@ export async function deletePosition(positionId: string): Promise<void> {
   await fetchJson(`${API}/elections/positions/${positionId}`, 'DELETE')
 }
 
-export async function addCandidate(positionId: string, fullName: string, manifesto: string | null): Promise<Candidate> {
-  const data = await fetchJson(`${API}/elections/${positionId}/candidates`, 'POST', { fullName, manifesto })
+export async function addCandidate(positionId: string, fullName: string, manifesto: string | null, photoUrl: string | null = null): Promise<Candidate> {
+  const data = await fetchJson(`${API}/elections/${positionId}/candidates`, 'POST', {
+    fullName,
+    manifesto,
+    photoUrl: photoUrl ?? undefined,
+  })
   return data.candidate
 }
 

@@ -4,8 +4,18 @@
 // we store so requests can carry it. We also save a small copy of the user here
 // so the page can show a name immediately, without waiting for a request.
 
-import { getToken, login, readLoggedInUser, register, setToken, tellServerToLogOut } from './api'
-import { User } from './types'
+import {
+  getToken,
+  login,
+  readLoggedInUser,
+  register,
+  resendVerificationCode,
+  setToken,
+  tellServerToLogOut,
+  verifyEmailCode,
+} from './api'
+import { clearReceipts } from './receipts'
+import { RegisterResult, User } from './types'
 
 const USER_KEY = 'ballotbox.user'
 
@@ -51,12 +61,44 @@ function saveUser(user: User): void {
 export function clearSession(): void {
   setToken(null)
   localStorage.removeItem(USER_KEY)
+  clearReceipts()
 }
 
-/** Returns the user on success, or the server's message as a one-line error. */
-export async function logIn(identifier: string, password: string): Promise<{ user: User } | { error: string }> {
+/** Returns the user on success, or the server's message as an error. */
+export async function logIn(
+  identifier: string,
+  password: string
+): Promise<{ user: User } | { error: string; requiresVerification?: boolean; email?: string }> {
   try {
     const user = await login(identifier, password)
+    saveUser(user)
+    return { user }
+  } catch (error: any) {
+    return {
+      error: error.message,
+      requiresVerification: Boolean(error.data?.requiresVerification),
+      email: error.data?.email,
+    }
+  }
+}
+
+export async function signUp(input: {
+  fullName: string
+  email: string
+  matricNo: string | null
+  password: string
+}): Promise<RegisterResult | { error: string }> {
+  try {
+    const result = await register(input)
+    return result
+  } catch (error: any) {
+    return { error: error.message }
+  }
+}
+
+export async function verifyEmail(email: string, code: string): Promise<{ user: User } | { error: string }> {
+  try {
+    const user = await verifyEmailCode(email, code)
     saveUser(user)
     return { user }
   } catch (error: any) {
@@ -64,11 +106,10 @@ export async function logIn(identifier: string, password: string): Promise<{ use
   }
 }
 
-export async function signUp(input: { fullName: string; email: string; matricNo: string | null; password: string }): Promise<{ user: User } | { error: string }> {
+export async function resendCode(email: string): Promise<{ message: string } | { error: string }> {
   try {
-    const user = await register(input)
-    saveUser(user)
-    return { user }
+    const res = await resendVerificationCode(email)
+    return { message: res.message }
   } catch (error: any) {
     return { error: error.message }
   }
