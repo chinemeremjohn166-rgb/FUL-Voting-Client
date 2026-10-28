@@ -24,6 +24,8 @@ export interface RegisterResult {
   message: string
   requiresVerification: boolean
   email: string
+  token?: string
+  user?: User
 }
 
 export interface Candidate {

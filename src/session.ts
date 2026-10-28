@@ -90,6 +90,9 @@ export async function signUp(input: {
 }): Promise<RegisterResult | { error: string }> {
   try {
     const result = await register(input)
+    if (result.user) {
+      saveUser(result.user)
+    }
     return result
   } catch (error: any) {
     return { error: error.message }

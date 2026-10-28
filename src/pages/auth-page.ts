@@ -163,6 +163,16 @@ export function registerPage(): Page {
 
         if ('error' in result) return showError(root, result.error)
 
+        if (!result.requiresVerification && result.user) {
+          toast(`Account created! Welcome, ${result.user.fullName.split(' ')[0]}`, 'success')
+          if (result.user.role === 'ADMIN') {
+            location.hash = '#/admin'
+          } else {
+            location.hash = '#/elections'
+          }
+          return
+        }
+
         toast('Verification code sent to your email!', 'info')
         location.hash = `#/auth/verify-email?email=${encodeURIComponent(email)}`
       })

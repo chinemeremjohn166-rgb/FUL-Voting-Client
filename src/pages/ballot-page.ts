@@ -69,7 +69,7 @@ export function ballotPage(electionId: string): Page {
           <span class="ballot-secrecy">${icon('shield', 15)} Secret ballot — no record of your choices is kept with your identity</span>
           <div class="ballot-footer-right">
             <span class="ballot-progress-text" data-progress></span>
-            <button class="btn primary" type="button" data-review disabled>Review &amp; cast ballot</button>
+            <button class="btn primary" type="button" data-review>Review &amp; cast ballot</button>
           </div>
         </div>
         <div data-confirm-slot></div>
@@ -80,11 +80,14 @@ export function ballotPage(electionId: string): Page {
       if (!election) return
       const detail = election
 
-      // Every click on a candidate button lands here.
-      root.querySelectorAll('[data-pick]').forEach((button) => {
-        button.addEventListener('click', () => {
-          const candidateId = button.getAttribute('data-pick') ?? ''
-          const section = button.closest('[data-position]')
+      // Clicking candidate row delegates selection cleanly.
+      root.querySelectorAll<HTMLElement>('.ballot-candidate').forEach((candidateEl) => {
+        candidateEl.addEventListener('click', (event) => {
+          // If clicked inside manifesto <details>, allow normal expand/collapse
+          if ((event.target as HTMLElement).closest('details')) return
+
+          const candidateId = candidateEl.getAttribute('data-row') ?? ''
+          const section = candidateEl.closest('[data-position]')
           if (!section || !candidateId) return
           const positionId = section.getAttribute('data-position') ?? ''
           const position = detail.positions.find((item) => item.id === positionId)
@@ -96,25 +99,53 @@ export function ballotPage(electionId: string): Page {
           } else if (chosen.candidateIds.length < position.seats) {
             chosen.candidateIds.push(candidateId)
             chosen.abstain = false
+          } else {
+            toast(
+              `You can select at most ${position.seats} candidate${position.seats === 1 ? '' : 's'} for "${position.title}".`,
+              'info',
+            )
           }
           paint(root, detail, picks)
         })
       })
 
-      root.querySelectorAll('[data-abstain]').forEach((box) => {
+      root.querySelectorAll<HTMLInputElement>('[data-abstain]').forEach((box) => {
         box.addEventListener('change', () => {
           const section = box.closest('[data-position]')
           const positionId = section?.getAttribute('data-position') ?? ''
           const chosen = picks.get(positionId)
           if (!chosen) return
-          chosen.abstain = (box as HTMLInputElement).checked
+          chosen.abstain = box.checked
           if (chosen.abstain) chosen.candidateIds = []
           paint(root, detail, picks)
         })
       })
 
       const review = root.querySelector<HTMLButtonElement>('[data-review]')
-      review?.addEventListener('click', () => showConfirmation(root, detail, picks, review))
+      review?.addEventListener('click', () => {
+        const undecided = detail.positions.filter((position) => {
+          const chosen = picks.get(position.id)
+          return !chosen || (!chosen.abstain && chosen.candidateIds.length === 0)
+        })
+
+        if (undecided.length > 0) {
+          const first = undecided[0]
+          const section = root.querySelector<HTMLElement>(`[data-position="${first.id}"]`)
+          if (section) {
+            section.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            section.classList.add('position-highlight')
+            setTimeout(() => section.classList.remove('position-highlight'), 1800)
+          }
+          const remaining = undecided.length
+          toast(
+            `Please make a selection or abstain for "${first.title}" (${remaining} position${remaining === 1 ? '' : 's'} remaining).`,
+            'info',
+          )
+          return
+        }
+
+        showConfirmation(root, detail, picks, review)
+      })
 
       paint(root, detail, picks)
     },
@@ -166,26 +197,36 @@ function paint(root: HTMLElement, election: ElectionDetail, picks: Map<string, P
     }
 
     const atLimit = chosen.candidateIds.length >= position.seats
-    section.querySelectorAll('[data-pick]').forEach((button) => {
-      const candidateId = button.getAttribute('data-pick') ?? ''
+    section.querySelectorAll<HTMLElement>('.ballot-candidate').forEach((row) => {
+      const candidateId = row.getAttribute('data-row') ?? ''
+      const button = row.querySelector<HTMLButtonElement>('[data-pick]')
       const selected = chosen.candidateIds.includes(candidateId)
-      const row = section.querySelector(`[data-row="${candidateId}"]`)
-      row?.classList.toggle('selected', selected)
-      button.classList.toggle('primary', selected)
-      button.setAttribute('aria-pressed', String(selected))
-      button.toggleAttribute('disabled', chosen.abstain || (atLimit && !selected))
-      button.textContent = selected ? 'Selected' : atLimit && !selected ? 'Limit reached' : 'Select'
+
+      row.classList.toggle('selected', selected)
+      if (button) {
+        button.classList.toggle('primary', selected)
+        button.setAttribute('aria-pressed', String(selected))
+        button.toggleAttribute('disabled', chosen.abstain || (atLimit && !selected))
+        button.textContent = selected ? 'Selected' : atLimit && !selected ? 'Limit reached' : 'Select'
+      }
     })
 
     const box = section.querySelector<HTMLInputElement>('[data-abstain]')
     if (box) box.checked = chosen.abstain
   }
 
+  const allDecided = decided === election.positions.length
   const progress = root.querySelector('[data-progress]')
-  if (progress) progress.textContent = `${decided} of ${election.positions.length} positions decided`
+  if (progress) {
+    progress.textContent = `${decided} of ${election.positions.length} positions decided`
+    progress.classList.toggle('done', allDecided)
+  }
 
   const review = root.querySelector<HTMLButtonElement>('[data-review]')
-  if (review) review.toggleAttribute('disabled', decided !== election.positions.length)
+  if (review) {
+    review.classList.toggle('is-incomplete', !allDecided)
+    review.setAttribute('aria-disabled', String(!allDecided))
+  }
 }
 
 /** Turns the picks into the flat list the API expects, with abstentions as null. */
@@ -205,66 +246,84 @@ function toSelections(election: ElectionDetail, picks: Map<string, Picks>): Sele
   return selections
 }
 
-function showConfirmation(root: HTMLElement, election: ElectionDetail, picks: Map<string, Picks>, review: HTMLButtonElement): void {
+function showConfirmation(
+  root: HTMLElement,
+  election: ElectionDetail,
+  picks: Map<string, Picks>,
+  review: HTMLButtonElement,
+): void {
   const slot = root.querySelector('[data-confirm-slot]')
   if (!slot) return
 
-  const rows = election.positions.map((position) => {
-    const chosen = picks.get(position.id)
-    const names = chosen?.abstain
-      ? 'Abstain (blank vote)'
-      : (chosen?.candidateIds ?? [])
-          .map((id) => position.candidates.find((candidate) => candidate.id === id)?.fullName ?? 'Unknown')
-          .join(', ')
-    return `<div class="confirm-row"><span class="confirm-pos">${esc(position.title)}</span><strong>${esc(names)}</strong></div>`
-  }).join('')
+  const rows = election.positions
+    .map((position) => {
+      const chosen = picks.get(position.id)
+      const names = chosen?.abstain
+        ? 'Abstain (blank vote)'
+        : (chosen?.candidateIds ?? [])
+            .map((id) => position.candidates.find((candidate) => candidate.id === id)?.fullName ?? 'Unknown')
+            .join(', ')
+      return `<div class="confirm-row"><span class="confirm-pos">${esc(position.title)}</span><strong>${esc(names || 'None selected')}</strong></div>`
+    })
+    .join('')
 
-  // Not a real modal window — it sits in the page where the voter is working —
-  // but it is a decision that must not be missed, so it is named, focused, and
-  // hands focus back to "Review ballot" when dismissed.
-  slot.innerHTML = `<div class="card confirm-card" role="dialog" aria-labelledby="ballot-confirm-title">
-    <h2 class="modal-title" id="ballot-confirm-title" tabindex="-1">Cast this ballot?</h2>
-    <p class="modal-text">This cannot be undone. Once cast, a ballot is anonymous and cannot be changed or revoked.</p>
-    <div class="confirm-summary">${rows}</div>
-    <p class="form-error" data-error role="alert" style="display:none"></p>
-    <div class="modal-actions">
-      <button class="btn ghost" type="button" data-cancel>Go back</button>
-      <button class="btn primary" type="button" data-cast>Cast ballot</button>
+  slot.innerHTML = `<div class="modal-backdrop" data-modal-backdrop>
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="ballot-confirm-title">
+      <button class="btn-icon" type="button" aria-label="Close" data-cancel>${icon('x', 18)}</button>
+      <h2 class="modal-title" id="ballot-confirm-title" tabindex="-1">Cast this ballot?</h2>
+      <p class="modal-text">This cannot be undone. Once cast, a ballot is anonymous and cannot be changed or revoked.</p>
+      <div class="confirm-summary">${rows}</div>
+      <p class="form-error" data-error role="alert" style="display:none"></p>
+      <div class="modal-actions">
+        <button class="btn ghost" type="button" data-cancel>Go back</button>
+        <button class="btn primary" type="button" data-cast>Cast ballot</button>
+      </div>
     </div>
   </div>`
-  slot.querySelector<HTMLElement>('#ballot-confirm-title')?.focus()
-  slot.scrollIntoView({ behavior: 'smooth', block: 'center' })
 
-  slot.querySelector('[data-cancel]')?.addEventListener('click', () => {
-    slot.innerHTML = ''
-    review.focus()
-  })
-
+  const backdrop = slot.querySelector<HTMLElement>('[data-modal-backdrop]')
+  const dialogTitle = slot.querySelector<HTMLElement>('#ballot-confirm-title')
   const castButton = slot.querySelector<HTMLButtonElement>('[data-cast]')
   const errorLine = slot.querySelector<HTMLElement>('[data-error]')
+
+  dialogTitle?.focus()
+
+  const closeModal = () => {
+    window.removeEventListener('keydown', onKeyDown)
+    slot.innerHTML = ''
+    review.focus()
+  }
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') closeModal()
+  }
+  window.addEventListener('keydown', onKeyDown)
+
+  slot.querySelectorAll('[data-cancel]').forEach((btn) => {
+    btn.addEventListener('click', closeModal)
+  })
+
+  backdrop?.addEventListener('click', (e) => {
+    if (e.target === backdrop) closeModal()
+  })
+
   if (!castButton || !errorLine) return
 
   castButton.addEventListener('click', async () => {
     setBusy(castButton, true, 'Casting ballot…')
+    errorLine.setAttribute('style', 'display:none')
     try {
       const receipt = await castBallot(election.id, toSelections(election, picks))
-      // The API never hands back "my ballots" (ballots are anonymous), so the
-      // receipt is remembered in this browser the moment it is issued.
       saveReceipt(receipt)
 
-      // The voter may have moved to another page while this request was in
-      // flight. The ballot is cast either way, but a page that is no longer on
-      // screen must not drag them back to it.
-      if (!castButton.isConnected) return
-
+      window.removeEventListener('keydown', onKeyDown)
       slot.innerHTML = ''
       toast('Ballot cast successfully', 'success')
       location.hash = `#/receipt/${election.id}`
     } catch (error: any) {
-      if (!castButton.isConnected) return
       setBusy(castButton, false)
       errorLine.removeAttribute('style')
-      errorLine.textContent = error.message
+      errorLine.textContent = error.message || 'Failed to cast ballot. Please try again.'
     }
   })
 }

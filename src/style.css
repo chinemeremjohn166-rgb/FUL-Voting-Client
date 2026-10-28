@@ -526,9 +526,10 @@ textarea.input { resize: vertical; }
 .ballot-intro { margin-bottom: 20px; max-width: 75ch; }
 .ballot-list { display: flex; flex-direction: column; gap: 16px; padding-bottom: 86px; }
 .ballot-candidates { display: flex; flex-direction: column; gap: 10px; }
-.ballot-candidate { align-items: center; background: var(--surface); transition: border-color 0.15s ease, background 0.15s ease; }
+.ballot-candidate { align-items: center; background: var(--surface); transition: border-color 0.15s ease, background 0.15s ease; cursor: pointer; }
+.ballot-candidate:hover:not(.selected) { border-color: var(--accent); }
 .ballot-candidate.selected { border-color: var(--accent); background: var(--accent-soft); }
-.ballot-candidate .btn { flex-shrink: 0; }
+.ballot-candidate .btn { flex-shrink: 0; pointer-events: none; }
 .abstain-row {
   display: flex;
   align-items: center;
@@ -561,6 +562,17 @@ textarea.input { resize: vertical; }
 .ballot-secrecy { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
 .ballot-footer-right { display: flex; align-items: center; gap: 14px; }
 .ballot-progress-text { font-size: 13.5px; font-weight: 600; color: var(--muted); }
+.ballot-progress-text.done { color: var(--success); }
+
+.position-highlight {
+  outline: 2px solid var(--accent) !important;
+  box-shadow: 0 0 0 4px var(--accent-soft) !important;
+  transition: outline 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn.is-incomplete {
+  opacity: 0.85;
+}
 
 /* --------------------------------------------------------------- receipt */
 

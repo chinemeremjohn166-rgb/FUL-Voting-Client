@@ -153,6 +153,9 @@ export async function register(input: {
     matricNo: input.matricNo ?? undefined,
     password: input.password,
   });
+  if (data.token) {
+    setToken(data.token);
+  }
   return data;
 }
 
