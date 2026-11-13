@@ -8,6 +8,7 @@
 // src/pages/, one file per screen.
 
 import './style.css'
+import { serverName } from './api'
 import { checkSavedLogin, clearSession, getUser, logOut } from './session'
 import { Page } from './types'
 import { avatar, errorHtml, esc, icon, loadingHtml, setBusy, toast } from './ui'
@@ -194,7 +195,7 @@ function topbarHtml(parts: string[]): string {
 function shellHtml(parts: string[]): string {
   return `${topbarHtml(parts)}
     <main class="container"><div class="view">${loadingHtml()}</div></main>
-    <footer class="footer"><span>BallotBox — election data comes from the local voting API on port 8000.</span></footer>`
+    <footer class="footer"><span>BallotBox — election data comes from ${esc(serverName)}.</span></footer>`
 }
 
 function bindSignOut(): void {

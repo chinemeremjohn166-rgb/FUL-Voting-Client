@@ -1,8 +1,10 @@
 // Every call to the voting API lives in this one file.
 // Each function below builds one URL, calls one fetch, and returns the JSON.
 //
-// The API runs on port 8000. The browser talks to it through the dev proxy set
-// up in vite.config.ts, which is why every URL here starts with a plain "/api".
+// With no VITE_BASE_URL set, URLs start with a plain "/api" and the dev proxy in
+// vite.config.ts forwards them to the API on port 8000. A deployed build sets the
+// base URL to the API's own address and the browser calls it directly, which is
+// why that server has to list this site in its CORS_ORIGIN.
 
 import {
   ApiError,
@@ -19,10 +21,21 @@ import {
   User,
 } from "./types";
 
-const API = import.meta.env.VITE_BASE_URL + "/api/v1";
+const BASE = import.meta.env.VITE_BASE_URL ?? "";
+const API = BASE + "/api/v1";
+
+/**
+ * Where the API lives, in words a reader can act on. With no base URL the
+ * requests go to this same site and the dev proxy forwards them to port 8000;
+ * a deployed build points at the real host instead, and the pages should say so.
+ */
+export const serverName = BASE ? new URL(BASE).origin : "the local voting API on port 8000";
 
 const TOKEN_KEY = "ballotbox.token";
-const REQUEST_TIMEOUT_MS = 15000;
+
+// A server that has been left idle - a free Render instance asleep between
+// visits - needs longer than a few seconds to answer its first request.
+const REQUEST_TIMEOUT_MS = 30000;
 
 // --------------------------------------------------------------- the plumbing
 
@@ -69,14 +82,16 @@ async function fetchJson(
       signal: controller.signal,
     });
   } catch (error: any) {
+    // These two look identical on screen and need different fixes, so say
+    // which one happened.
     if (error?.name === "AbortError")
       throw failed(
         0,
-        "The voting server took too long to answer. Please try again.",
+        `${serverName} did not answer in ${REQUEST_TIMEOUT_MS / 1000} seconds. A server that has been idle can take a minute to wake up - try again.`,
       );
     throw failed(
       0,
-      "Cannot reach the voting server. Is it running on port 8000?",
+      `The browser could not get an answer from ${serverName}. A cross-origin request also fails like this when the server does not list this site in its CORS_ORIGIN.`,
     );
   } finally {
     clearTimeout(timer);
@@ -103,7 +118,7 @@ async function fetchJson(
 function messageFor(status: number, data: any): string {
   if (typeof data?.message === "string") return data.message;
   if (status === 502 || status === 504)
-    return "Cannot reach the voting server. Is it running on port 8000?";
+    return `Cannot reach ${serverName}.`;
   if (status === 401)
     return "This sign-in is no longer valid. Please sign in again.";
   if (status === 403) return "This account is not allowed to do that.";
